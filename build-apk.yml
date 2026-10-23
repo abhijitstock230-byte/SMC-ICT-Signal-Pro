@@ -24,8 +24,15 @@ jobs:
 
       - name: Unzip Android project
         run: |
-          unzip -o SMC_ICT_Signal_Pro.zip -d source
-          PROJECT_DIR="$(dirname "$(find source -name settings.gradle.kts -print -quit)")"
+          set -e
+          ls -la
+          unzip -o SMC_ICT_Signal_Pro_Phone_Build.zip -d source
+          SETTINGS_FILE="$(find source -name settings.gradle.kts -print -quit)"
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: settings.gradle.kts not found inside ZIP"
+            exit 1
+          fi
+          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Build APK
