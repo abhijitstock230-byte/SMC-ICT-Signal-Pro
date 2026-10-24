@@ -1,0 +1,60 @@
+name: Build SMC ICT Signal Pro APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Find and unzip Android project
+        run: |
+          set -e
+          mkdir -p source
+          ZIP_FILE=$(find . -maxdepth 1 -type f -name '*.zip' | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No ZIP file found in repository root"
+            ls -la
+            exit 1
+          fi
+
+          echo "Found ZIP: $ZIP_FILE"
+          unzip -o "$ZIP_FILE" -d source
+
+          SETTINGS_FILE=$(find source -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)
+
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: Gradle settings file not found in ZIP"
+            find source -maxdepth 3 -type f | head -100
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Build APK
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+          gradle assembleDebug
+          find app/build/outputs/apk -name '*.apk' -exec cp {} "$GITHUB_WORKSPACE/SMC-ICT-Signal-Pro.apk" \;
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SMC-ICT-Signal-Pro-APK
+          path: SMC-ICT-Signal-Pro.apk
