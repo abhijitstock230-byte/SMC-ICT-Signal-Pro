@@ -19,36 +19,61 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
 
-      - name: Unzip Android project
+      - name: Find and unzip Android project
         run: |
           set -e
+
           mkdir -p source
-          ZIP_FILE=$(find . -maxdepth 1 -type f -name '*.zip' | head -n 1)
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: ZIP file not found in repository root"
+
+          ZIP_FILE="./SMC_ICT_Signal_Pro_Phone_Build.zip"
+
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: ZIP file not found: $ZIP_FILE"
+            echo "Files in repository:"
+            ls -la
             exit 1
           fi
+
+          echo "Using ZIP: $ZIP_FILE"
           unzip -o "$ZIP_FILE" -d source
+
           SETTINGS_FILE=$(find source -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)
+
           if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: No Gradle settings file found inside ZIP"
+            echo "ERROR: Gradle settings file not found in ZIP"
+            find source -maxdepth 4 -type f | head -100
             exit 1
           fi
+
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+
+          echo "Android project found at: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Build APK
         run: |
           set -e
+
           cd "$PROJECT_DIR"
+
+          echo "Building Android APK..."
           gradle assembleDebug
-          cp app/build/outputs/apk/debug/*.apk "$GITHUB_WORKSPACE/SMC-ICT-Signal-Pro.apk"
+
+          APK_FILE=$(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)
+
+          if [ -z "$APK_FILE" ]; then
+            echo "ERROR: APK file not generated"
+            exit 1
+          fi
+
+          cp "$APK_FILE" "$GITHUB_WORKSPACE/SMC-ICT-Signal-Pro.apk"
+
+          echo "APK created successfully"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: SMC-ICT-Signal-Pro-APK
           path: SMC-ICT-Signal-Pro.apk
+          if-no-files-found: error
