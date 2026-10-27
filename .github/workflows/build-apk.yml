@@ -24,7 +24,7 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="./SMC_ICT_Signal_Pro_Updated_Project.zip"
+          ZIP_FILE="./SMC_ICT_Signal_Pro_Updated_Project_JVM17.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
             echo "ERROR: Updated project ZIP not found!"
