@@ -143,9 +143,9 @@ fun SignalProApp() {
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = Green,
-            onPrimary = DarkText,
+            onPrimary = whiteText,
             secondary = Gold,
-            onSecondary = DarkText,
+            onSecondary = whiteText,
             background = Background,
             onBackground = White,
             surface = Panel,
@@ -241,7 +241,7 @@ fun SignalProApp() {
                         },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = Green,
-                            selectedLabelColor = DarkText,
+                            selectedLabelColor = WhiteText,
                             containerColor = Panel,
                             labelColor = White,
                             selectedLeadingIconColor = DarkText,
