@@ -4,9 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,28 +28,9 @@ private val Gold = Color(0xFFFFC857)
 private val White = Color(0xFFFFFFFF)
 private val DarkText = Color(0xFF0B1020)
 
-private val markets = listOf(
-    "ALL",
-    "INDIA",
-    "CRYPTO",
-    "FOREX",
-    "METALS"
-)
-
-private val timeframes = listOf(
-    "All",
-    "1m",
-    "5m",
-    "15m",
-    "1h",
-    "4h",
-    "1D"
-)
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContent {
             SignalProApp()
         }
@@ -66,79 +49,86 @@ data class MarketSignal(
 @Composable
 fun SignalProApp() {
 
-    var selectedMarket by remember {
-        mutableStateOf("ALL")
-    }
+    var selectedMarket by remember { mutableStateOf("ALL") }
+    var selectedTimeframe by remember { mutableStateOf("All") }
 
-    var selectedTimeframe by remember {
-        mutableStateOf("All")
-    }
+    val markets = listOf(
+        "ALL",
+        "INDIA",
+        "CRYPTO",
+        "FOREX",
+        "METALS"
+    )
+
+    val timeframes = listOf(
+        "All", "1m", "5m", "15m", "1h", "4h", "1D"
+    )
 
     val signals = remember {
         listOf(
             MarketSignal(
-                "NIFTY 50", "INDIA", "WAIT",
-                "15m", "Live feed not connected"
+                "NIFTY 50", "INDIA", "WAIT", "15m",
+                "Waiting for sweep and structure confirmation"
             ),
             MarketSignal(
-                "BANKNIFTY", "INDIA", "WAIT",
-                "5m", "Live feed not connected"
+                "BANKNIFTY", "INDIA", "WAIT", "5m",
+                "No confirmed entry setup"
             ),
             MarketSignal(
-                "SENSEX", "INDIA", "WAIT",
-                "15m", "Live feed not connected"
+                "SENSEX", "INDIA", "WAIT", "15m",
+                "Waiting for market structure confirmation"
             ),
             MarketSignal(
-                "FINNIFTY", "INDIA", "WAIT",
-                "15m", "Live feed not connected"
+                "FINNIFTY", "INDIA", "WAIT", "1h",
+                "Higher timeframe confirmation pending"
             ),
             MarketSignal(
-                "MIDCPNIFTY", "INDIA", "WAIT",
-                "15m", "Live feed not connected"
+                "MIDCPNIFTY", "INDIA", "WAIT", "5m",
+                "Demo analysis only"
             ),
             MarketSignal(
-                "BTC/USDT", "CRYPTO", "WAIT",
-                "5m", "Live analysis not implemented"
+                "BTC/USDT", "CRYPTO", "WAIT", "5m",
+                "Live feed not connected"
             ),
             MarketSignal(
-                "ETH/USDT", "CRYPTO", "WAIT",
-                "15m", "Live analysis not implemented"
+                "ETH/USDT", "CRYPTO", "WAIT", "15m",
+                "Live analysis not implemented"
             ),
             MarketSignal(
-                "BNB/USDT", "CRYPTO", "WAIT",
-                "15m", "Live analysis not implemented"
+                "BNB/USDT", "CRYPTO", "WAIT", "1h",
+                "Demo data only"
             ),
             MarketSignal(
-                "SOL/USDT", "CRYPTO", "WAIT",
-                "15m", "Live analysis not implemented"
+                "SOL/USDT", "CRYPTO", "WAIT", "5m",
+                "Waiting for structure confirmation"
             ),
             MarketSignal(
-                "XRP/USDT", "CRYPTO", "WAIT",
-                "15m", "Live analysis not implemented"
+                "XRP/USDT", "CRYPTO", "WAIT", "15m",
+                "Demo data only"
             ),
             MarketSignal(
-                "DOGE/USDT", "CRYPTO", "WAIT",
-                "15m", "Live analysis not implemented"
+                "DOGE/USDT", "CRYPTO", "WAIT", "1h",
+                "Live feed not connected"
             ),
             MarketSignal(
-                "EUR/USD", "FOREX", "WAIT",
-                "15m", "Live feed not connected"
+                "EUR/USD", "FOREX", "WAIT", "15m",
+                "Live feed not connected"
             ),
             MarketSignal(
-                "GBP/USD", "FOREX", "WAIT",
-                "1h", "Live feed not connected"
+                "GBP/USD", "FOREX", "WAIT", "1h",
+                "Live analysis not implemented"
             ),
             MarketSignal(
-                "USD/JPY", "FOREX", "WAIT",
-                "15m", "Live feed not connected"
+                "USD/JPY", "FOREX", "WAIT", "4h",
+                "Demo data only"
             ),
             MarketSignal(
-                "GOLD (XAU/USD)", "METALS", "WAIT",
-                "15m", "Live feed not connected"
+                "GOLD (XAU/USD)", "METALS", "WAIT", "15m",
+                "Live feed not connected"
             ),
             MarketSignal(
-                "SILVER (XAG/USD)", "METALS", "WAIT",
-                "15m", "Live feed not connected"
+                "SILVER (XAG/USD)", "METALS", "WAIT", "1h",
+                "Demo data only"
             )
         )
     }
@@ -161,295 +151,246 @@ fun SignalProApp() {
             surface = Panel,
             onSurface = White,
             surfaceVariant = Color(0xFF202B43),
-            onSurfaceVariant = white 
+            onSurfaceVariant = White
         )
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Background
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Background)
+                .padding(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Background)
-                    .padding(16.dp)
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically
             ) {
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = "SMC ICT",
-                            color = White,
-                            fontSize = 27.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-
-                        Text(
-                            text = "SIGNAL PRO",
-                            color = Green,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 3.sp
-                        )
-                    }
-
-                    Surface(
-                        color = Color(0xFF263149),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text(
-                            text = "DEMO",
-                            color = Gold,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(
-                                horizontal = 12.dp,
-                                vertical = 9.dp
-                            )
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(22.dp))
-
-                Text(
-                    text = "SELECT MARKET",
-                    color = White,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(Modifier.height(10.dp))
-
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    markets.chunked(3).forEach { rowMarkets ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement =
-                                Arrangement.spacedBy(8.dp)
-                        ) {
-                            rowMarkets.forEach { market ->
-                                val selected =
-                                    selectedMarket == market
-
-                                FilterChip(
-                                    selected = selected,
-                                    onClick = {
-                                        selectedMarket = market
-                                    },
-                                    label = {
-                                        Text(
-                                            text = market,
-                                            color = if (selected) {
-                                                DarkText
-                                            } else {
-                                                White
-                                            },
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    },
-                                    colors =
-                                        FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Green,
-                                            selectedLabelColor = DarkText,
-                                            containerColor = Panel,
-                                            labelColor = White,
-                                            selectedLeadingIconColor = DarkText,
-                                            leadingIconColor = White
-                                        ),
-                                    border =
-                                        FilterChipDefaults.filterChipBorder(
-                                            enabled = true,
-                                            selected = selected,
-                                            borderColor = Color(0xFF46536D),
-                                            selectedBorderColor = Green
-                                        ),
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-
-                            repeat(3 - rowMarkets.size) {
-                                Spacer(
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(18.dp))
-
-                Text(
-                    text = "SELECT TIMEFRAME",
-                    color = White,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement =
-                        Arrangement.spacedBy(4.dp)
-                ) {
-                    timeframes.forEach { timeframe ->
-                        val selected =
-                            selectedTimeframe == timeframe
-
-                        Surface(
-                            onClick = {
-                                selectedTimeframe = timeframe
-                            },
-                            color = if (selected) Green else Panel,
-                            contentColor = if (selected) {
-                                DarkText
-                            } else {
-                                White
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = 1.dp,
-                                color = if (selected) {
-                                    Green
-                                } else {
-                                    Color(0xFF46536D)
-                                }
-                            ),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(
-                                        vertical = 11.dp,
-                                        horizontal = 1.dp
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = timeframe,
-                                    color = if (selected) {
-                                        DarkText
-                                    } else {
-                                        White
-                                    },
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(18.dp))
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Panel
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp)
-                    ) {
-                        Text(
-                            text = "SMC + ICT ANALYSIS",
-                            color = Green,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.height(8.dp))
-
-                        Text(
-                            text = "Market Structure • BOS • CHoCH • " +
-                                "Liquidity Sweep • Order Blocks • FVG",
-                            color = White,
-                            fontSize = 12.sp,
-                            lineHeight = 19.sp
-                        )
-
-                        Spacer(Modifier.height(8.dp))
-
-                        Text(
-                            text = "DEMO MODE: Real-time analysis is " +
-                                "not yet available for all markets.",
-                            color = Gold,
-                            fontSize = 11.sp,
-                            lineHeight = 17.sp
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(18.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = "MARKET SIGNALS",
+                        text = "SMC ICT",
                         color = White,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
 
                     Text(
-                        text = "${visibleSignals.size} markets",
-                        color = Muted,
+                        text = "SIGNAL PRO",
+                        color = Green,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 3.sp
+                    )
+                }
+
+                Surface(
+                    color = Color(0xFF263149),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "DEMO MODE",
+                        color = Gold,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(
+                            horizontal = 10.dp,
+                            vertical = 8.dp
+                        )
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Text(
+                text = "MARKET SCANNER",
+                color = White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                markets.forEach { market ->
+
+                    val selected = selectedMarket == market
+
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            selectedMarket = market
+                        },
+                        label = {
+                            Text(
+                                text = market,
+                                color = if (selected) {
+                                    DarkText
+                                } else {
+                                    White
+                                },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Green,
+                            selectedLabelColor = DarkText,
+                            containerColor = Panel,
+                            labelColor = White,
+                            selectedLeadingIconColor = DarkText,
+                            leadingIconColor = White,
+                            disabledContainerColor = Panel,
+                            disabledLabelColor = White
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selected,
+                            borderColor = Muted,
+                            selectedBorderColor = Green
+                        )
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                text = "TIMEFRAME",
+                color = White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                timeframes.forEach { timeframe ->
+
+                    val selected = selectedTimeframe == timeframe
+
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            selectedTimeframe = timeframe
+                        },
+                        label = {
+                            Text(
+                                text = timeframe,
+                                color = if (selected) {
+                                    DarkText
+                                } else {
+                                    White
+                                },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Green,
+                            selectedLabelColor = WhiteText,
+                            containerColor = Panel,
+                            labelColor = White,
+                            disabledContainerColor = Panel,
+                            disabledLabelColor = White
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selected,
+                            borderColor = Muted,
+                            selectedBorderColor = Green
+                        )
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = Panel
+                ),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp)
+                ) {
+                    Text(
+                        text = "STRICT SMC + ICT",
+                        color = Green,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        text = "Liquidity Sweep • BOS/CHoCH • Order Block • FVG",
+                        color = White,
                         fontSize = 12.sp
                     )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        text = "Live market feeds and actual SMC/ICT signal analysis are not connected yet. The cards below show demo status only.",
+                        color = Gold,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
                 }
+            }
 
-                Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(16.dp))
 
-                if (visibleSignals.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No markets for this timeframe.",
-                            color = Muted,
-                            fontSize = 14.sp
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        verticalArrangement =
-                            Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(visibleSignals) { signal ->
-                            SignalCard(signal)
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(10.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "MARKET SIGNALS",
+                    color = White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    modifier = Modifier.weight(1f)
+                )
 
                 Text(
-                    text = "Educational prototype • No orders placed",
-                    color = Muted,
-                    fontSize = 10.sp
+                    text = "${visibleSignals.size} instruments",
+                    color = White,
+                    fontSize = 12.sp
                 )
             }
+
+            Spacer(Modifier.height(10.dp))
+
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(visibleSignals) { signal ->
+                    SignalCard(signal)
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = "Educational prototype • Demo data • No orders placed",
+                color = Muted,
+                fontSize = 10.sp
+            )
         }
     }
 }
@@ -464,17 +405,17 @@ fun SignalCard(signal: MarketSignal) {
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = Panel
-        )
+        ),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(14.dp)
         ) {
+
             Row(
-                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(
@@ -483,56 +424,54 @@ fun SignalCard(signal: MarketSignal) {
                     Text(
                         text = signal.symbol,
                         color = White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
                     )
-
-                    Spacer(Modifier.height(4.dp))
 
                     Text(
                         text = "${signal.market} • ${signal.timeframe}",
                         color = Muted,
-                        fontSize = 12.sp
+                        fontSize = 11.sp
                     )
                 }
 
                 Surface(
-                    color = accent.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(8.dp)
+                    color = accent.copy(alpha = 0.14f),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
                         text = signal.direction,
                         color = accent,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         modifier = Modifier.padding(
-                            horizontal = 13.dp,
-                            vertical = 8.dp
+                            horizontal = 12.dp,
+                            vertical = 7.dp
                         )
                     )
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
 
             Text(
                 text = signal.reason,
                 color = White,
                 fontSize = 12.sp,
-                lineHeight = 18.sp
+                lineHeight = 17.sp
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                InfoTag("Entry: N/A")
-                InfoTag("SL: N/A")
-                InfoTag("TP: N/A")
+                MiniTag("Entry: pending")
+                MiniTag("SL: pending")
+                MiniTag("TP: pending")
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
 
             Text(
                 text = signal.status,
@@ -546,10 +485,9 @@ fun SignalCard(signal: MarketSignal) {
 }
 
 @Composable
-fun InfoTag(text: String) {
+fun MiniTag(text: String) {
     Surface(
         color = Color(0xFF202B43),
-        contentColor = White,
         shape = RoundedCornerShape(8.dp)
     ) {
         Text(
@@ -558,7 +496,7 @@ fun InfoTag(text: String) {
             fontSize = 10.sp,
             modifier = Modifier.padding(
                 horizontal = 8.dp,
-                vertical = 7.dp
+                vertical = 6.dp
             )
         )
     }
