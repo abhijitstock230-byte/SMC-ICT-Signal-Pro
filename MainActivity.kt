@@ -161,7 +161,7 @@ fun SignalProApp() {
             surface = Panel,
             onSurface = White,
             surfaceVariant = Color(0xFF202B43),
-            onSurfaceVariant = Muted
+            onSurfaceVariant = white 
         )
     ) {
         Surface(
