@@ -21,40 +21,75 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Find and unzip Android project
+        shell: bash
         run: |
           set -e
 
-          ZIP_FILE="./SMC_ICT_Signal_Pro_Updated_Project_JVM17.zip"
+          ZIP_FILE="$GITHUB_WORKSPACE/SMC_ICT_Signal_Pro_Updated_Project_JVM17.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
             echo "ERROR: Updated project ZIP not found!"
             echo "Files in repository:"
-            find . -maxdepth 2 -type f
+            find "$GITHUB_WORKSPACE" -maxdepth 2 -type f
             exit 1
           fi
 
-          mkdir -p source
-          unzip -o "$ZIP_FILE" -d source
+          mkdir -p "$GITHUB_WORKSPACE/source"
 
-          SETTINGS_FILE=$(find source -type f \
+          unzip -o "$ZIP_FILE" -d "$GITHUB_WORKSPACE/source"
+
+          SETTINGS_FILE=$(find "$GITHUB_WORKSPACE/source" -type f \
             \( -name settings.gradle -o -name settings.gradle.kts \) \
             -print -quit)
 
           if [ -z "$SETTINGS_FILE" ]; then
             echo "ERROR: Gradle settings file not found!"
-            find source -maxdepth 4 -type f | head -100
+            find "$GITHUB_WORKSPACE/source" -maxdepth 5 -type f | head -100
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
           echo "Android project found at: $PROJECT_DIR"
           ls -la "$PROJECT_DIR"
 
-      - name: Build APK
+      - name: Apply latest MainActivity.kt
+        shell: bash
         run: |
           set -e
+
+          SOURCE_FILE="$GITHUB_WORKSPACE/MainActivity.kt"
+
+          if [ ! -f "$SOURCE_FILE" ]; then
+            echo "ERROR: MainActivity.kt not found in repository root!"
+            exit 1
+          fi
+
+          TARGET_FILE=$(find "$PROJECT_DIR/app/src/main" -type f \
+            -name MainActivity.kt -print -quit)
+
+          if [ -z "$TARGET_FILE" ]; then
+            echo "ERROR: MainActivity.kt not found in extracted Android project!"
+            exit 1
+          fi
+
+          echo "Source file: $SOURCE_FILE"
+          echo "Target file: $TARGET_FILE"
+
+          cp "$SOURCE_FILE" "$TARGET_FILE"
+
+          echo "Latest MainActivity.kt copied successfully."
+
+          echo "Checking for expected signal code..."
+          grep -n "LIVE DATA UNAVAILABLE" "$TARGET_FILE" || true
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -e
+
           cd "$PROJECT_DIR"
 
           gradle assembleDebug
@@ -68,6 +103,8 @@ jobs:
           fi
 
           cp "$APK_FILE" "$GITHUB_WORKSPACE/SMC-ICT-Signal-Pro.apk"
+
+          echo "APK created successfully."
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
