@@ -18,6 +18,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.json.JSONArray
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.Locale
+import kotlin.math.abs
 
 private val Background = Color(0xFF0B1020)
 private val Panel = Color(0xFF151D31)
@@ -27,6 +32,7 @@ private val Red = Color(0xFFFF6577)
 private val Gold = Color(0xFFFFC857)
 private val White = Color(0xFFFFFFFF)
 private val DarkText = Color(0xFF0B1020)
+private val ChipBackground = Color(0xFF263149)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,17 +46,286 @@ class MainActivity : ComponentActivity() {
 data class MarketSignal(
     val symbol: String,
     val market: String,
-    val direction: String,
-    val timeframe: String,
-    val reason: String,
-    val status: String = "DEMO DATA"
+    val direction: String = "WAIT",
+    val timeframe: String = "15m",
+    val reason: String = "Select GET SIGNAL to analyse",
+    val status: String = "NOT ANALYSED",
+    val entry: Double? = null,
+    val stopLoss: Double? = null,
+    val target1: Double? = null,
+    val target2: Double? = null,
+    val target3: Double? = null,
+    val live: Boolean = false
 )
+
+private data class Candle(
+    val high: Double,
+    val low: Double,
+    val close: Double
+)
+
+private fun price(value: Double?): String {
+    if (value == null || !value.isFinite()) return "N/A"
+
+    return String.format(
+        Locale.US,
+        "%.6f",
+        value
+    ).trimEnd('0').trimEnd('.')
+}
+
+private fun average(
+    values: List<Double>,
+    period: Int
+): Double {
+    if (values.isEmpty()) return 0.0
+
+    val selected = values.takeLast(period)
+
+    return selected.average()
+}
+
+private fun intervalFor(timeframe: String): String {
+    return when (timeframe) {
+        "1m" -> "1m"
+        "5m" -> "5m"
+        "15m" -> "15m"
+        "1h" -> "1h"
+        "4h" -> "4h"
+        "1D" -> "1d"
+        else -> "15m"
+    }
+}
+
+private fun binanceSymbol(symbol: String): String? {
+    return when (symbol) {
+        "BTC/USDT" -> "BTCUSDT"
+        "ETH/USDT" -> "ETHUSDT"
+        "BNB/USDT" -> "BNBUSDT"
+        "SOL/USDT" -> "SOLUSDT"
+        "XRP/USDT" -> "XRPUSDT"
+        "DOGE/USDT" -> "DOGEUSDT"
+        else -> null
+    }
+}
+
+private fun fetchCandles(
+    symbol: String,
+    timeframe: String
+): List<Candle> {
+
+    val interval = intervalFor(timeframe)
+
+    val endpoint =
+        "https://api.binance.com/api/v3/klines" +
+        "?symbol=$symbol" +
+        "&interval=$interval" +
+        "&limit=100"
+
+    val connection =
+        URL(endpoint).openConnection() as HttpURLConnection
+
+    try {
+        connection.requestMethod = "GET"
+        connection.connectTimeout = 10000
+        connection.readTimeout = 10000
+
+        val responseCode = connection.responseCode
+
+        if (responseCode !in 200..299) {
+            throw Exception("Binance HTTP error: $responseCode")
+        }
+
+        val response = connection.inputStream
+            .bufferedReader()
+            .use { it.readText() }
+
+        val json = JSONArray(response)
+        val candles = mutableListOf<Candle>()
+
+        for (i in 0 until json.length()) {
+            val row = json.getJSONArray(i)
+
+            candles.add(
+                Candle(
+                    high = row.getString(2).toDouble(),
+                    low = row.getString(3).toDouble(),
+                    close = row.getString(4).toDouble()
+                )
+            )
+        }
+
+        if (candles.size < 25) {
+            throw Exception("Not enough candle data")
+        }
+
+        return candles
+
+    } finally {
+        connection.disconnect()
+    }
+}
+
+private fun analyseMarket(
+    signal: MarketSignal,
+    timeframe: String
+): MarketSignal {
+
+    val apiSymbol = binanceSymbol(signal.symbol)
+
+    if (apiSymbol == null) {
+        return signal.copy(
+            direction = "WAIT",
+            timeframe = timeframe,
+            reason = "Live data provider is not connected for this market.",
+            status = "LIVE DATA UNAVAILABLE",
+            entry = null,
+            stopLoss = null,
+            target1 = null,
+            target2 = null,
+            target3 = null,
+            live = false
+        )
+    }
+
+    return try {
+        val candles = fetchCandles(apiSymbol, timeframe)
+
+        val closes = candles.map { it.close }
+
+        val last = candles.last()
+        val previous = candles[candles.lastIndex - 1]
+
+        val emaFast = average(closes, 9)
+        val emaSlow = average(closes, 21)
+
+        val recent = candles.takeLast(10)
+
+        val recentHigh = recent.maxOf { it.high }
+        val recentLow = recent.minOf { it.low }
+
+        val direction = when {
+            emaFast > emaSlow && last.close > previous.close -> "BUY"
+            emaFast < emaSlow && last.close < previous.close -> "SELL"
+            else -> "WAIT"
+        }
+
+        val entry = last.close
+
+        val sl: Double?
+        val t1: Double?
+        val t2: Double?
+        val t3: Double?
+
+        if (direction == "BUY") {
+
+            sl = recentLow
+
+            val risk = entry - sl
+
+            if (risk <= 0.0) {
+                return signal.copy(
+                    direction = "WAIT",
+                    timeframe = timeframe,
+                    reason = "Invalid risk distance; no trade setup.",
+                    status = "LIVE DATA • NO TRADE",
+                    entry = entry,
+                    live = true
+                )
+            }
+
+            t1 = entry + risk
+            t2 = entry + risk * 2
+            t3 = entry + risk * 3
+
+        } else if (direction == "SELL") {
+
+            sl = recentHigh
+
+            val risk = sl - entry
+
+            if (risk <= 0.0) {
+                return signal.copy(
+                    direction = "WAIT",
+                    timeframe = timeframe,
+                    reason = "Invalid risk distance; no trade setup.",
+                    status = "LIVE DATA • NO TRADE",
+                    entry = entry,
+                    live = true
+                )
+            }
+
+            t1 = entry - risk
+            t2 = entry - risk * 2
+            t3 = entry - risk * 3
+
+        } else {
+
+            sl = null
+            t1 = null
+            t2 = null
+            t3 = null
+        }
+
+        val reason = when (direction) {
+            "BUY" ->
+                "Fast trend average is above slow average and the latest close is rising. Basic trend signal; not full SMC/ICT confirmation."
+
+            "SELL" ->
+                "Fast trend average is below slow average and the latest close is falling. Basic trend signal; not full SMC/ICT confirmation."
+
+            else ->
+                "Trend confirmation is mixed. Wait for a clearer setup."
+        }
+
+        signal.copy(
+            direction = direction,
+            timeframe = timeframe,
+            reason = reason,
+            status = "LIVE BINANCE DATA • BASIC TREND",
+            entry = entry,
+            stopLoss = sl,
+            target1 = t1,
+            target2 = t2,
+            target3 = t3,
+            live = true
+        )
+
+    } catch (e: Exception) {
+
+        signal.copy(
+            direction = "WAIT",
+            timeframe = timeframe,
+            reason = "Unable to load live candles. Check internet or retry.",
+            status = "LIVE DATA ERROR",
+            entry = null,
+            stopLoss = null,
+            target1 = null,
+            target2 = null,
+            target3 = null,
+            live = false
+        )
+    }
+}
 
 @Composable
 fun SignalProApp() {
 
-    var selectedMarket by remember { mutableStateOf("ALL") }
-    var selectedTimeframe by remember { mutableStateOf("All") }
+    var selectedMarket by remember {
+        mutableStateOf("ALL")
+    }
+
+    var selectedTimeframe by remember {
+        mutableStateOf("15m")
+    }
+
+    var loading by remember {
+        mutableStateOf(false)
+    }
+
+    var message by remember {
+        mutableStateOf("Select a market and tap GET SIGNAL.")
+    }
 
     val markets = listOf(
         "ALL",
@@ -61,76 +336,36 @@ fun SignalProApp() {
     )
 
     val timeframes = listOf(
-        "All", "1m", "5m", "15m", "1h", "4h", "1D"
+        "All",
+        "1m",
+        "5m",
+        "15m",
+        "1h",
+        "4h",
+        "1D"
     )
 
-    val signals = remember {
-        listOf(
-            MarketSignal(
-                "NIFTY 50", "INDIA", "WAIT", "15m",
-                "Waiting for sweep and structure confirmation"
-            ),
-            MarketSignal(
-                "BANKNIFTY", "INDIA", "WAIT", "5m",
-                "No confirmed entry setup"
-            ),
-            MarketSignal(
-                "SENSEX", "INDIA", "WAIT", "15m",
-                "Waiting for market structure confirmation"
-            ),
-            MarketSignal(
-                "FINNIFTY", "INDIA", "WAIT", "1h",
-                "Higher timeframe confirmation pending"
-            ),
-            MarketSignal(
-                "MIDCPNIFTY", "INDIA", "WAIT", "5m",
-                "Demo analysis only"
-            ),
-            MarketSignal(
-                "BTC/USDT", "CRYPTO", "WAIT", "5m",
-                "Live feed not connected"
-            ),
-            MarketSignal(
-                "ETH/USDT", "CRYPTO", "WAIT", "15m",
-                "Live analysis not implemented"
-            ),
-            MarketSignal(
-                "BNB/USDT", "CRYPTO", "WAIT", "1h",
-                "Demo data only"
-            ),
-            MarketSignal(
-                "SOL/USDT", "CRYPTO", "WAIT", "5m",
-                "Waiting for structure confirmation"
-            ),
-            MarketSignal(
-                "XRP/USDT", "CRYPTO", "WAIT", "15m",
-                "Demo data only"
-            ),
-            MarketSignal(
-                "DOGE/USDT", "CRYPTO", "WAIT", "1h",
-                "Live feed not connected"
-            ),
-            MarketSignal(
-                "EUR/USD", "FOREX", "WAIT", "15m",
-                "Live feed not connected"
-            ),
-            MarketSignal(
-                "GBP/USD", "FOREX", "WAIT", "1h",
-                "Live analysis not implemented"
-            ),
-            MarketSignal(
-                "USD/JPY", "FOREX", "WAIT", "4h",
-                "Demo data only"
-            ),
-            MarketSignal(
-                "GOLD (XAU/USD)", "METALS", "WAIT", "15m",
-                "Live feed not connected"
-            ),
-            MarketSignal(
-                "SILVER (XAG/USD)", "METALS", "WAIT", "1h",
-                "Demo data only"
-            )
-        )
+    val initialSignals = listOf(
+        MarketSignal("NIFTY 50", "INDIA"),
+        MarketSignal("BANKNIFTY", "INDIA"),
+        MarketSignal("SENSEX", "INDIA"),
+        MarketSignal("FINNIFTY", "INDIA"),
+        MarketSignal("MIDCPNIFTY", "INDIA"),
+        MarketSignal("BTC/USDT", "CRYPTO"),
+        MarketSignal("ETH/USDT", "CRYPTO"),
+        MarketSignal("BNB/USDT", "CRYPTO"),
+        MarketSignal("SOL/USDT", "CRYPTO"),
+        MarketSignal("XRP/USDT", "CRYPTO"),
+        MarketSignal("DOGE/USDT", "CRYPTO"),
+        MarketSignal("EUR/USD", "FOREX"),
+        MarketSignal("GBP/USD", "FOREX"),
+        MarketSignal("USD/JPY", "FOREX"),
+        MarketSignal("GOLD (XAU/USD)", "METALS"),
+        MarketSignal("SILVER (XAG/USD)", "METALS")
+    )
+
+    var signals by remember {
+        mutableStateOf(initialSignals)
     }
 
     val visibleSignals = signals.filter { signal ->
@@ -143,14 +378,14 @@ fun SignalProApp() {
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = Green,
-            onPrimary = whiteText,
+            onPrimary = DarkText,
             secondary = Gold,
-            onSecondary = whiteText,
+            onSecondary = DarkText,
             background = Background,
             onBackground = White,
             surface = Panel,
             onSurface = White,
-            surfaceVariant = Color(0xFF202B43),
+            surfaceVariant = ChipBackground,
             onSurfaceVariant = White
         )
     ) {
@@ -185,18 +420,15 @@ fun SignalProApp() {
                 }
 
                 Surface(
-                    color = Color(0xFF263149),
+                    color = ChipBackground,
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
-                        text = "DEMO MODE",
+                        text = if (loading) "SCANNING" else "SIGNAL SCANNER",
                         color = Gold,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(
-                            horizontal = 10.dp,
-                            vertical = 8.dp
-                        )
+                        modifier = Modifier.padding(10.dp)
                     )
                 }
             }
@@ -230,24 +462,16 @@ fun SignalProApp() {
                         label = {
                             Text(
                                 text = market,
-                                color = if (selected) {
-                                    DarkText
-                                } else {
-                                    White
-                                },
+                                color = White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = Green,
-                            selectedLabelColor = WhiteText,
+                            selectedLabelColor = White,
                             containerColor = Panel,
-                            labelColor = White,
-                            selectedLeadingIconColor = DarkText,
-                            leadingIconColor = White,
-                            disabledContainerColor = Panel,
-                            disabledLabelColor = White
+                            labelColor = White
                         ),
                         border = FilterChipDefaults.filterChipBorder(
                             enabled = true,
@@ -288,22 +512,16 @@ fun SignalProApp() {
                         label = {
                             Text(
                                 text = timeframe,
-                                color = if (selected) {
-                                    DarkText
-                                } else {
-                                    White
-                                },
+                                color = White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = Green,
-                            selectedLabelColor = WhiteText,
+                            selectedLabelColor = White,
                             containerColor = Panel,
-                            labelColor = White,
-                            disabledContainerColor = Panel,
-                            disabledLabelColor = White
+                            labelColor = White
                         ),
                         border = FilterChipDefaults.filterChipBorder(
                             enabled = true,
@@ -328,7 +546,7 @@ fun SignalProApp() {
                     modifier = Modifier.padding(14.dp)
                 ) {
                     Text(
-                        text = "STRICT SMC + ICT",
+                        text = "SMC + ICT SIGNAL SCANNER",
                         color = Green,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
@@ -345,7 +563,7 @@ fun SignalProApp() {
                     Spacer(Modifier.height(8.dp))
 
                     Text(
-                        text = "Live market feeds and actual SMC/ICT signal analysis are not connected yet. The cards below show demo status only.",
+                        text = "Crypto uses Binance candle data. Other markets require their own live data providers. Signals use a basic trend rule, not complete SMC/ICT analysis.",
                         color = Gold,
                         fontSize = 11.sp,
                         lineHeight = 16.sp
@@ -353,7 +571,68 @@ fun SignalProApp() {
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
+
+            Button(
+                onClick = {
+                    if (!loading) {
+                        loading = true
+                        message = "Fetching market data..."
+
+                        val targetMarket = selectedMarket
+                        val targetTimeframe = selectedTimeframe
+
+                        Thread {
+                            val selected = initialSignals.filter {
+                                targetMarket == "ALL" ||
+                                    it.market == targetMarket
+                            }
+
+                            val results = selected.map { signal ->
+                                analyseMarket(signal, targetTimeframe)
+                            }
+
+                            runOnUiThread {
+                                signals = signals.map { old ->
+                                    results.find {
+                                        it.symbol == old.symbol
+                                    } ?: old
+                                }
+
+                                loading = false
+                                message =
+                                    "Scan complete. Check each card's data status."
+                            }
+                        }.start()
+                    }
+                },
+                enabled = !loading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Green,
+                    contentColor = DarkText,
+                    disabledContainerColor = Muted
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = if (loading) "SCANNING..." else "GET SIGNAL",
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 16.sp
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = message,
+                color = Muted,
+                fontSize = 11.sp
+            )
+
+            Spacer(Modifier.height(12.dp))
 
             Row(
                 verticalAlignment = Alignment.CenterVertically
@@ -379,7 +658,7 @@ fun SignalProApp() {
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(visibleSignals) { signal ->
+                items(visibleSignals, key = { it.symbol }) { signal ->
                     SignalCard(signal)
                 }
             }
@@ -387,7 +666,7 @@ fun SignalProApp() {
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text = "Educational prototype • Demo data • No orders placed",
+                text = "Educational tool • Verify signals before trading • No orders placed",
                 color = Muted,
                 fontSize = 10.sp
             )
@@ -436,7 +715,7 @@ fun SignalCard(signal: MarketSignal) {
                 }
 
                 Surface(
-                    color = accent.copy(alpha = 0.14f),
+                    color = accent.copy(alpha = 0.16f),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
@@ -452,52 +731,72 @@ fun SignalCard(signal: MarketSignal) {
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
+
+            PriceLine("Entry Price", signal.entry, White)
+            PriceLine("Stop Loss", signal.stopLoss, Red)
+            PriceLine("Target 1", signal.target1, Green)
+            PriceLine("Target 2", signal.target2, Green)
+            PriceLine("Target 3", signal.target3, Green)
+
+            Spacer(Modifier.height(12.dp))
 
             Text(
                 text = signal.reason,
                 color = White,
                 fontSize = 12.sp,
-                lineHeight = 17.sp
+                lineHeight = 18.sp
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            Surface(
+                color = if (signal.live) {
+                    Green.copy(alpha = 0.12f)
+                } else {
+                    Gold.copy(alpha = 0.12f)
+                },
+                shape = RoundedCornerShape(8.dp)
             ) {
-                MiniTag("Entry: pending")
-                MiniTag("SL: pending")
-                MiniTag("TP: pending")
+                Text(
+                    text = signal.status,
+                    color = if (signal.live) Green else Gold,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(
+                        horizontal = 10.dp,
+                        vertical = 7.dp
+                    )
+                )
             }
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = signal.status,
-                color = Gold,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
         }
     }
 }
 
 @Composable
-fun MiniTag(text: String) {
-    Surface(
-        color = Color(0xFF202B43),
-        shape = RoundedCornerShape(8.dp)
+fun PriceLine(
+    label: String,
+    value: Double?,
+    valueColor: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = text,
+            text = label,
             color = White,
-            fontSize = 10.sp,
-            modifier = Modifier.padding(
-                horizontal = 8.dp,
-                vertical = 6.dp
-            )
+            fontSize = 12.sp,
+            modifier = Modifier.weight(1f)
+        )
+
+        Text(
+            text = price(value),
+            color = valueColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
         )
     }
 }
