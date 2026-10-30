@@ -1,4 +1,4 @@
-package com.example.smcictsignalpro
+package com.smcict.signalpro
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
